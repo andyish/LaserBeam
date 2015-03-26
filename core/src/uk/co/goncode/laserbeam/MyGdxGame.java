@@ -3,13 +3,14 @@ package uk.co.goncode.laserbeam;
 import com.badlogic.gdx.ApplicationAdapter;
 import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.InputProcessor;
-import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.GL20;
 import com.badlogic.gdx.graphics.OrthographicCamera;
 import com.badlogic.gdx.graphics.Texture;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.graphics.g2d.TextureRegion;
 import com.badlogic.gdx.graphics.glutils.ShapeRenderer;
+import com.badlogic.gdx.math.Interpolation;
+import com.badlogic.gdx.math.MathUtils;
 import com.badlogic.gdx.math.Vector2;
 import com.badlogic.gdx.math.Vector3;
 import com.badlogic.gdx.utils.Scaling;
@@ -34,6 +35,10 @@ public class MyGdxGame extends ApplicationAdapter {
 
     private float distance;
     private float minDistance;
+    private Vector2 mousePos;
+    private boolean isFiring;
+    private long laserDrawnTill;
+    private long duration;
 
     @Override
 	public void create () {
@@ -64,8 +69,15 @@ public class MyGdxGame extends ApplicationAdapter {
         viewport.apply();
 
         minDistance = startBackground.getRegionHeight() / 2 + endBackground.getRegionHeight() / 2;
+
+        mousePos = new Vector2();
+
+        isFiring = false;
+        duration = 400;
+        laserDrawnTill = 0;
 	}
 
+    float tracker = 0;
 	@Override
 	public void render () {
         camera.update();
@@ -80,46 +92,81 @@ public class MyGdxGame extends ApplicationAdapter {
 
 		batch.begin();
 
-        batch.setColor(Color.RED);
-        batch.draw(startBackground,
-                middle.x, middle.y,
-                startBackground.getRegionWidth() / 2, startBackground.getRegionHeight() / 2,
-                startBackground.getRegionWidth(), startBackground.getRegionHeight(),
-                1.0f, 1.0f, rotation);
-        batch.draw(midBackground,
-                middle.x, middle.y + startBackground.getRegionHeight(),
-                midBackground.getRegionWidth() / 2, -(startBackground.getRegionHeight() / 2),
-                midBackground.getRegionWidth(), distance,
-                1.0f, 1.0f, rotation);
-        batch.draw(endBackground,
-                middle.x, middle.y + endBackground.getRegionHeight() + distance,
-                endBackground.getRegionWidth() / 2, -(endBackground.getRegionHeight() / 2 + distance),
-                endBackground.getRegionWidth(), endBackground.getRegionHeight(),
-                1.0f, 1.0f, rotation);
+//        y=Asin(2π(k+o)/p)+b
+//        A is the amplitude of the sine wave.
+//        p is the number of time samples per sine wave period.
+//                k is a repeating integer value that ranges from 0 to p–1.
+//        o is the offset (phase shift) of the signal.
+//                b is the signal bias.
+//        float val = (float)( Math.sin(tracker * 0.1) + 1) / 2;
+//        val = MathUtils.clamp(val, 0.1f, 0.9f);
 
-        batch.setColor(Color.ORANGE);
+        if(System.currentTimeMillis() > laserDrawnTill) {
+            isFiring = false;
+        }
 
-        batch.draw(startOverlay,
-                middle.x, middle.y,
-                startOverlay.getRegionWidth() / 2, startOverlay.getRegionHeight() / 2,
-                startOverlay.getRegionWidth(), startOverlay.getRegionHeight(),
-                1.0f, 1.0f, rotation);
+        if(isFiring) {
 
-        batch.draw(midOverlay,
-                middle.x, middle.y + startBackground.getRegionHeight(),
-                midOverlay.getRegionWidth() / 2, -(midOverlay.getRegionHeight() / 2),
-                midOverlay.getRegionWidth(), distance,
-                1.0f, 1.0f, rotation);
+            long timeleft = laserDrawnTill - System.currentTimeMillis();
+            float decay = 1.0f;
 
-        batch.draw(endOverlay,
-                middle.x, middle.y + endOverlay.getRegionHeight() + distance,
-                endOverlay.getRegionWidth() / 2, -(endOverlay.getRegionHeight() / 2  + distance),
-                endOverlay.getRegionWidth(), endOverlay.getRegionHeight(),
-                1.0f, 1.0f, rotation);
+            if(timeleft < duration - 100)
+                decay = Interpolation.linear.apply(0.0f, 1.0f, (float) timeleft / (duration - 100));
 
-        batch.setColor(Color.YELLOW);
+            // overlay
+            batch.setColor(1, 0.78f, 0, decay);
+            batch.draw(startOverlay,
+                    middle.x - startBackground.getRegionWidth(), middle.y - startBackground.getRegionHeight(),
+                    startOverlay.getRegionWidth() / 2, startOverlay.getRegionHeight() / 2,
+                    startOverlay.getRegionWidth(), startOverlay.getRegionHeight(),
+                    1.0f, 1.0f, rotation);
+
+            batch.draw(midOverlay,
+                    middle.x - startBackground.getRegionWidth(), middle.y + startBackground.getRegionHeight() - startBackground.getRegionHeight(),
+                    midOverlay.getRegionWidth() / 2, -(midOverlay.getRegionHeight() / 2),
+                    midOverlay.getRegionWidth(), distance,
+                    1.0f, 1.0f, rotation);
+
+            batch.draw(endOverlay,
+                    middle.x - startBackground.getRegionWidth(), middle.y + endOverlay.getRegionHeight() + distance - startBackground.getRegionHeight(),
+                    endOverlay.getRegionWidth() / 2, -(endOverlay.getRegionHeight() / 2  + distance),
+                    endOverlay.getRegionWidth(), endOverlay.getRegionHeight(),
+                    1.0f, 1.0f, rotation);
+
+            tracker = tracker + 0.6f;
+            float val = MathUtils.lerp(0.5f, 1.0f, tracker);
+            float fade = Interpolation.sine.apply(0.9f, 1.0f, val);
+
+            if(fade - (1 - decay) < 0.01f) {
+                fade = decay;
+            } else {
+                fade = fade - (1 - decay);
+            }
+
+            // beam
+            batch.setColor(0, 0, 1, fade);
+            batch.draw(startBackground,
+                    middle.x - startBackground.getRegionWidth(), middle.y - startBackground.getRegionHeight(),
+                    startBackground.getRegionWidth() / 2, startBackground.getRegionHeight() / 2,
+                    startBackground.getRegionWidth(), startBackground.getRegionHeight(),
+                    1.0f, 1.0f, rotation);
+            batch.draw(midBackground,
+                    middle.x - startBackground.getRegionWidth(), middle.y + startBackground.getRegionHeight() - startBackground.getRegionHeight(),
+                    midBackground.getRegionWidth() / 2, -(startBackground.getRegionHeight() / 2),
+                    midBackground.getRegionWidth(), distance,
+                    1.0f, 1.0f, rotation);
+            batch.draw(endBackground,
+                    middle.x - startBackground.getRegionWidth(), middle.y + endBackground.getRegionHeight() + distance - startBackground.getRegionHeight(),
+                    endBackground.getRegionWidth() / 2, -(endBackground.getRegionHeight() / 2 + distance),
+                    endBackground.getRegionWidth(), endBackground.getRegionHeight(),
+                    1.0f, 1.0f, rotation);
+
+        }
+
+
+//        batch.setColor(Color.YELLOW);
 //        batch.draw(animation,
-//                middle.x, middle.y + animation.getRegionHeight() / 2,
+//                middle.x, middle.y + animation.getRegionHeight(),
 //                animation.getRegionWidth() / 2, -(animation.getRegionHeight() / 4),
 //                animation.getRegionWidth(), middle.y + animation.getRegionHeight() / 2 + distance - endOverlay.getRegionHeight() / 2,
 //                1.0f, 1.0f, rotation);
@@ -149,6 +196,19 @@ public class MyGdxGame extends ApplicationAdapter {
 
         @Override
         public boolean touchDown(int screenX, int screenY, int pointer, int button) {
+            Vector3 unproject = camera.unproject(new Vector3(screenX, screenY, 0));
+            mousePos.set(unproject.x, unproject.y);
+
+            rotation = (float) angleBetween(middle, mousePos) - 90;
+
+            distance = (float) (mousePos.dst(middle) -  startBackground.getRegionHeight() * 1.5);
+
+            if(distance < minDistance)
+                distance = minDistance;
+
+            isFiring = true;
+            laserDrawnTill = System.currentTimeMillis() + duration;
+
             return false;
         }
 
@@ -164,15 +224,6 @@ public class MyGdxGame extends ApplicationAdapter {
 
         @Override
         public boolean mouseMoved(int screenX, int screenY) {
-            Vector3 unproject = camera.unproject(new Vector3(screenX, screenY, 0));
-            Vector2 screenPos = new Vector2(unproject.x, unproject.y);
-
-            rotation = (float) angleBetween(middle, screenPos) - 90;
-
-            distance = screenPos.dst(middle);
-
-            if(distance < minDistance)
-                distance = minDistance;
 
             return false;
         }
